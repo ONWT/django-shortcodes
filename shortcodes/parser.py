@@ -1,3 +1,5 @@
+import hashlib
+import pprint
 import re
 import shortcodes.parsers
 from django.core.cache import cache
@@ -47,7 +49,7 @@ def construct_regex(parser_names):
 			'(\]?)'
 		"""
 		parser_names_reg = '|'.join(parser_names)
-		return r'\[(\[?)(parser_names)(?![\w-])([^\]\/]*(?:\/(?!\])[^\]\/]*)*?)(?:(\/)\]|\](?:([^\[]*(?:\[(?!\/\2\])[^\\[]*)*)\[\/\2\])?)(\]?)'
+		return '\\[(\\[?)('+parser_names_reg+')(?![\\w-])([^\\]\\/]*(?:\\/(?!\\])[^\\]\\/]*)*?)(?:(\\/)\\]|\\](?:([^\\[]*(?:\\[(?!\\/\\2\\])[^\\\\[]*)*)\\[\\/\\2\\])?)(\\]?)'
 
 
 def parse(value, parser_names=None):
@@ -60,27 +62,44 @@ def parse(value, parser_names=None):
 	parsed = value
 
 	for item_match in groups:
-		name = item_match.group(1)
+
+		name = item_match.group(2)
 		args = item_match.group(3)
 		args = __parse_args__(args)
-		args["shortcodeContent"]=item_match.group(5)
+		content = item_match.group(5)
+		#Content cleanup removed close tags in beginning
+		contentcleanup = re.compile(r'^(<\/[^>]*>)+')
+		content = contentcleanup.sub('', content)
+		args["shortcodeContent"] = content
+
 		length_diff = len(value)-len(parsed)
 
-		item = re.escape(item)
+		#Ok so we strip the tags in front parsed content
+		cleanup = re.compile(r'(<[^/][^>]*>)+$')
+		start = cleanup.sub('', parsed[:item_match.start()-length_diff])
+		parsed = start + parsed[item_match.start()-length_diff:]
+		#and the at after content we strip closed
+		endcleanup = re.compile(r'^(</[^>]*>)+')
+		end = endcleanup.sub('', parsed[item_match.end()-length_diff:])
+		parsed = parsed[:item_match.end()-length_diff] + end
+
+		length_diff = len(value)-len(parsed)
+
+		#item_match.group(0) returns the full match as string
+		cachekey = hashlib.md5(item_match.group(0).encode('utf-8')).hexdigest()
 		try:
-			if cache.get(item):
-				parsed = parsed[:item_match.start()] + cache.get(item) + parsed[item_match.end():]
+			if cache.get(cachekey):
+				parsed = parsed[:item_match.start()] + cache.get(cachekey) + parsed[item_match.end():]
 			else:
 				# TODO allow arbitrary modules to implement new parsers
 				module = import_parser('shortcodes.parsers.' + name)
 				function = getattr(module, 'parse')
 				result = function(args)
-				cache.set(item, result, 3600)
+				cache.set(cachekey, result, 3600)
 				# using length difference of original text and parsed text to get offset of where to splice the text
 				parsed = parsed[:item_match.start()-length_diff] + result + parsed[item_match.end()-length_diff:]
 		except ImportError:
 			pass
-
 	return parsed
 
 
