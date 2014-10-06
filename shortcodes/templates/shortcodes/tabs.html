@@ -1,0 +1,12 @@
+<div id={{ tab_id }} class="tabs-wrapper">
+	<ul class="nav nav-tabs" role="tablist">
+		{% for tab in tabs %}
+			<li class="{% if forloop.first %}active{% endif %}"><a href="#{{tab.0}}" role="tab" data-toggle="tab">{{tab.1|safe}}</a></li>
+		{% endfor %}
+	</ul>
+	<div class="tab-content">
+		{% for tab in tabs %}
+			<div class="tab-pane {% if forloop.first %}active{% endif %}" id="{{tab.0}}">{{tab.2|safe}}</div>
+		{% endfor %}
+	</div>
+</div>
