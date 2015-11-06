@@ -23,5 +23,5 @@ setup(
         "Framework :: Django",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
-    ],
+    ], requires=['django'],
 )
